@@ -2669,6 +2669,8 @@ pub fn get_member_streak(env: &Env, member: &Address) -> Streak {
     }
 }
 // Closes #201: set_reputation_registry correctly writes to DataKey::ReputationRegistry
+/// Sets the reputation registry that circles report to. Admin only; rejected
+/// while the contract is paused. Requires the admin's authorization.
 pub fn set_reputation_registry(
     env: &Env,
     admin: &Address,
@@ -2914,6 +2916,8 @@ pub fn get_allowlist(env: &Env) -> Vec<Address> {
         .unwrap_or_else(|| Vec::new(env))
 }
 
+/// Sets the primary price oracle. Admin only; rejected while the contract is
+/// paused. The fallback oracle is set separately with `set_fallback_oracle`.
 pub fn set_oracle(env: &Env, admin: &Address, oracle: &Address) -> Result<(), CircleError> {
     pause::when_not_paused(env).map_err(|_| CircleError::ContractPaused)?;
     let s: Address = env
@@ -2948,6 +2952,7 @@ pub fn set_fallback_oracle(
     Ok(())
 }
 
+/// Returns the primary oracle address, or `None` if none has been set.
 pub fn get_oracle(env: &Env) -> Option<Address> {
     oracle::get_primary_oracle(env)
 }
@@ -3082,6 +3087,8 @@ pub fn compute_circle_config_hash(env: &Env, circle: &Circle) -> BytesN<32> {
     env.crypto().sha256(&xdr_bytes).into()
 }
 
+/// Returns the SHA-256 hash of the configuration snapshot recorded for `round`.
+/// Fails with `InvalidRound` if no snapshot exists for that round.
 pub fn query_round_config(env: &Env, round: u32) -> Result<BytesN<32>, CircleError> {
     env.storage()
         .persistent()
