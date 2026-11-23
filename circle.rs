@@ -453,3 +453,14 @@ pub struct CircleConfig {
     pub base_amount: i128,
     pub collateral_amount: i128,
 }
+fn require_admin(env: &Env) -> Result<(), CircleError> {
+    let config: CircleConfig = env
+        .storage()
+        .instance()
+        .get(&DataKey::Config)
+        .ok_or(CircleError::CircleConfigNotFound)?;
+
+    config.admin.require_auth();
+
+    Ok(())
+}
