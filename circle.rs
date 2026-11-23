@@ -444,3 +444,12 @@ mod tests {
         assert_eq!(result, Err(Ok(CircleError::NoCollateralToRefund)));
     }
 }
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CircleConfig {
+    pub admin: Address,
+    pub token: Address,
+    pub base_amount: i128,
+    pub collateral_amount: i128,
+}
