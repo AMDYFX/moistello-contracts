@@ -2185,7 +2185,7 @@ pub fn get_contributions(
                 if count >= start && count < end {
                     out.push_back(c);
                 }
-                count += 1;
+                count = count.saturating_add(1);
             }
         }
     }
@@ -2435,12 +2435,11 @@ pub fn batch_payout(
         }
 
         // Calculate fee (#256)
-        let fee = if fee_bps > 0 {
-            (amount * (fee_bps as i128)) / 10000
+        let (net_amount, fee) = if fee_bps > 0 {
+            math::apply_fee(amount, fee_bps as i128).map_err(|_| CircleError::InvalidAmount)?
         } else {
-            0
+            (amount, 0)
         };
-        let net_amount = amount - fee;
 
         // Transfer net amount to recipient
         token_client.transfer(&circle.id, &recipient, &net_amount);
@@ -2581,13 +2580,13 @@ pub fn update_streak_internal(env: &Env, member: &Address, round: u32) -> Result
                     s.longest_streak = 1;
                 }
                 s.last_round = round;
-            } else if round == s.last_round + 1 {
-                s.current_streak += 1;
+            } else if s.last_round.checked_add(1) == Some(round) {
+                s.current_streak = s.current_streak.saturating_add(1);
                 if s.current_streak > s.longest_streak {
                     s.longest_streak = s.current_streak;
                 }
                 s.last_round = round;
-            } else if round > s.last_round + 1 {
+            } else if round > s.last_round.saturating_add(1) {
                 s.current_streak = 1;
                 s.last_round = round;
             }
@@ -2981,9 +2980,9 @@ pub fn calculate_health_score(
     let mut total_contributions: u32 = 0;
     for i in 0..contributions.len() {
         if let Some(c) = contributions.get(i) {
-            total_contributions += 1;
+            total_contributions = total_contributions.saturating_add(1);
             if c.on_time {
-                on_time_count += 1;
+                on_time_count = on_time_count.saturating_add(1);
             }
         }
     }
@@ -2998,11 +2997,11 @@ pub fn calculate_health_score(
     let mut exited_count: u32 = 0;
     for i in 0..members.len() {
         if let Some(m) = members.get(i) {
-            member_count += 1;
+            member_count = member_count.saturating_add(1);
             if m.status == MEMBER_DEFAULTED {
-                defaulted_count += 1;
+                defaulted_count = defaulted_count.saturating_add(1);
             } else if m.status == MEMBER_EXITED {
-                exited_count += 1;
+                exited_count = exited_count.saturating_add(1);
             }
         }
     }
@@ -3010,14 +3009,15 @@ pub fn calculate_health_score(
         (BPS_SCALE, BPS_SCALE)
     } else {
         (
-            (member_count - defaulted_count).saturating_mul(BPS_SCALE) / member_count,
-            (member_count - exited_count).saturating_mul(BPS_SCALE) / member_count,
+            member_count.saturating_sub(defaulted_count).saturating_mul(BPS_SCALE) / member_count,
+            member_count.saturating_sub(exited_count).saturating_mul(BPS_SCALE) / member_count,
         )
     };
 
-    let weighted = on_time_rate_bps as u64 * 40
-        + completion_rate_bps as u64 * 35
-        + member_retention_bps as u64 * 25;
+    let weighted = u64::from(on_time_rate_bps)
+        .saturating_mul(40)
+        .saturating_add(u64::from(completion_rate_bps).saturating_mul(35))
+        .saturating_add(u64::from(member_retention_bps).saturating_mul(25));
     let score = (weighted / (BPS_SCALE as u64 * 100)) as u32;
 
     HealthScoreResult {
