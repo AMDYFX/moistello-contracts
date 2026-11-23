@@ -2822,6 +2822,21 @@ pub fn set_token(env: &Env, admin: &Address, token: &Address) -> Result<(), Circ
     env.storage().instance().set(&DataKey::Circle, &circle);
     Ok(())
 }
+/// Sets the protocol fee in basis points.
+///
+/// # Parameters
+/// - `env`: Contract execution environment
+/// - `admin`: Must match the stored admin address and authorise the call
+/// - `fee_bps`: Fee in basis points, from 0 to 10_000 inclusive
+///
+/// # Returns
+/// `Ok(())` after storing the value in instance storage under `DataKey::FeeBps`.
+///
+/// # Errors
+/// - `ContractPaused` if the contract is paused
+/// - `NotInitialized` if no admin is stored
+/// - `Unauthorized` if `admin` is not the stored admin
+/// - `InvalidAmount` if `fee_bps` is greater than 10_000
 pub fn set_fee_bps(env: &Env, admin: &Address, fee_bps: u32) -> Result<(), CircleError> {
     pause::when_not_paused(env).map_err(|_| CircleError::ContractPaused)?;
     let s: Address = env
@@ -3028,6 +3043,21 @@ pub fn calculate_health_score(
     }
 }
 
+/// Computes the SHA-256 hash of a circle's configuration.
+///
+/// The hash covers the fixed config fields (organizer, token, name, amounts,
+/// limits, deadlines and slug). Mutable state such as `current_round`, `status`
+/// and totals is not included.
+///
+/// # Parameters
+/// - `env`: Contract execution environment
+/// - `circle`: Circle whose configuration is hashed
+///
+/// # Returns
+/// 32-byte SHA-256 digest of the XDR-encoded `CircleConfig`.
+///
+/// # Panics
+/// Does not panic. Used to write `RoundConfigSnapshot` at setup and on each round advance.
 pub fn compute_circle_config_hash(env: &Env, circle: &Circle) -> BytesN<32> {
     let config = CircleConfig {
         organizer: circle.organizer.clone(),
@@ -3059,6 +3089,18 @@ pub fn query_round_config(env: &Env, round: u32) -> Result<BytesN<32>, CircleErr
         .ok_or(CircleError::InvalidRound)
 }
 
+/// Returns the fee ledger recorded for a round.
+///
+/// # Parameters
+/// - `env`: Contract execution environment
+/// - `round`: Round number to look up
+///
+/// # Returns
+/// The stored `RoundFeeLedger` for `round`. If none is stored, a zeroed ledger
+/// for that round is returned (`payout_fee`, `late_penalty_fee` and `total_fee` are 0).
+///
+/// # Panics
+/// Does not panic. Performs no authorisation and does not check that the round exists.
 pub fn get_round_fee_ledger(env: &Env, round: u32) -> RoundFeeLedger {
     env.storage()
         .persistent()
@@ -3066,6 +3108,24 @@ pub fn get_round_fee_ledger(env: &Env, round: u32) -> RoundFeeLedger {
         .unwrap_or_else(|| empty_round_fee_ledger(round))
 }
 
+/// Marks a payout as scheduled for the current round.
+///
+/// Sets `PayoutScheduled(round)` to `true`. It does not transfer funds.
+///
+/// # Parameters
+/// - `env`: Contract execution environment
+/// - `caller`: Must be the circle organizer or the stored admin, and must authorise the call
+/// - `round`: Round to schedule. Must equal the circle's `current_round`
+///
+/// # Returns
+/// `Ok(())` after the flag is written. Calling it again for the same round rewrites the flag.
+///
+/// # Errors
+/// - `ContractPaused` if the contract is paused
+/// - `NotActive` if a reentrancy guard is already held or the circle status is not active
+/// - `NotInitialized` if the circle or admin is not stored
+/// - `Unauthorized` if `caller` is neither the organizer nor the admin
+/// - `RoundNotCurrent` if `round` is not the current round
 pub fn schedule_payout(env: &Env, caller: &Address, round: u32) -> Result<(), CircleError> {
     pause::when_not_paused(env).map_err(|_| CircleError::ContractPaused)?;
     let _guard = ReentrancyGuard::new(env).map_err(|_| CircleError::NotActive)?;
