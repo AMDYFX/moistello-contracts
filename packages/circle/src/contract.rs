@@ -2690,9 +2690,60 @@ pub fn set_reputation_registry(
         .set(&DataKey::ReputationRegistry, registry);
     Ok(())
 }
+/// Returns the reputation registry this circle reports to, if configured.
+///
+/// # Parameters
+/// - `env`: Contract execution environment
+///
+/// # Returns
+/// - `Some(Address)` with the configured reputation registry
+/// - `None` if no registry has been configured
+///
+/// # Authorization
+/// None. Read-only and callable by anyone.
+///
+/// # Storage
+/// Reads `DataKey::ReputationRegistry` from instance storage.
+///
+/// # Events
+/// None.
+///
+/// # Errors
+/// None. Does not return a `CircleError` and does not check the paused state.
 pub fn get_reputation_registry(env: &Env) -> Option<Address> {
     env.storage().instance().get(&DataKey::ReputationRegistry)
 }
+/// Sets the treasury address this circle routes fees to.
+///
+/// Only callable by the admin stored at initialization.
+///
+/// # Parameters
+/// - `env`: Contract execution environment
+/// - `admin`: Admin address, must match the stored admin
+/// - `treasury`: New treasury contract address (not validated)
+///
+/// # Returns
+/// - `Ok(())` on successful update
+/// - `Err(CircleError::ContractPaused)` if the circle is paused
+/// - `Err(CircleError::NotInitialized)` if no admin is stored
+/// - `Err(CircleError::Unauthorized)` if `admin` is not the stored admin
+///
+/// # Authorization
+/// Requires authentication from `admin`. The admin match is checked before
+/// `require_auth`, so a mismatched caller gets `Unauthorized`.
+///
+/// # Storage
+/// Reads `DataKey::Admin` and writes `DataKey::Treasury` in instance storage.
+///
+/// # Events
+/// None. No event is published.
+///
+/// # Notes
+/// Only the treasury is updated. Fee and reputation registry are unchanged.
+///
+/// # Panics
+/// A failed `require_auth` aborts the invocation instead of returning a
+/// `CircleError`.
 pub fn set_treasury(env: &Env, admin: &Address, treasury: &Address) -> Result<(), CircleError> {
     pause::when_not_paused(env).map_err(|_| CircleError::ContractPaused)?;
     let s: Address = env
